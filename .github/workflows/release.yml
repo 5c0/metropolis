@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build - ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      matrix:
+        platform:
+          - name: Linux
+            os: ubuntu-latest
+            bin: metropolis
+            target: x86_64-unknown-linux-gnu
+          - name: Windows
+            os: windows-latest
+            bin: metropolis.exe
+            target: x86_64-pc-windows-msvc
+          - name: macOS
+            os: macos-latest
+            bin: metropolis
+            target: x86_64-apple-darwin
+
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Build Binary
+        run: cargo build --release --locked --target ${{ matrix.platform.target }}
+
+      - name: Prepare Release Asset
+        shell: bash
+        run: |
+          mkdir -p dist
+          # Rename for clarity in assets
+          cp target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} dist/${{ matrix.platform.bin }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: metropolis-${{ matrix.platform.target }}
+          path: dist/${{ matrix.platform.bin }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./release-assets
+          merge-multiple: true
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./release-assets/*
+          body: "Metropolis: The city is breathing. 🌇"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
