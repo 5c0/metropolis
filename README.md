@@ -2,6 +2,7 @@
 
 ### "The year is 20XX. Your processes aren't just rows in a table. They're the residents. Your CPU isn't just silicon. It's the infrastructure. And the city? The city is breathing."
 
+
 ---
 
 ## 🏙️ What is Metropolis?
