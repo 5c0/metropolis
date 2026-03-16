@@ -39,7 +39,7 @@ Every flicker of a neon sign, every shuttle streaking across the sky, and every 
 ### **Monolithic Branding**
 Metropolis is loyal to its host. The skyline features a massive central monolith that reflects your identity:
 - **Cross-Platform DNA**: Native ASCII architecture that automatically detects and renders your OS identity.
-- **Corporate Sovereignty**: The main tower is branded by your OS corporation (e.g., `PARROT CORP`, `ARCH CORP`, `FEDORA SYSTEMS`).
+- **Corporate Sovereignty**: The main tower is branded by your OS corporation (e.g., `ARCH LINUX CORP`)
 
 ### **Resource-Reactive Logistics**
 The city infrastructure is directly wired into your kernel:
