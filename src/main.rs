@@ -42,7 +42,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut last_tick = Instant::now();
     let mut last_sysinfo_tick = Instant::now();
     let mut proc_names: Vec<String> = Vec::new();
-    let mut proc_tick_count = 0;
     let mut last_disk_bytes = 0u64;
 
     loop {
@@ -75,15 +74,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if last_tick.elapsed() >= tick_rate {
+            let mut cpu = sys.global_cpu_info().cpu_usage();
+            let mut ram = (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0;
+            let mut disk_usage = city.disk_usage;
+
             if last_sysinfo_tick.elapsed() >= sysinfo_tick_rate {
                 sys.refresh_all();
                 last_sysinfo_tick = Instant::now();
-            }
 
-            let cpu = sys.global_cpu_info().cpu_usage();
-            let ram = (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0;
-            
-            if proc_tick_count <= 0 {
+                cpu = sys.global_cpu_info().cpu_usage();
+                ram = (sys.used_memory() as f32 / sys.total_memory() as f32) * 100.0;
+
                 let mut procs: Vec<(String, f32)> = sys.processes()
                     .values()
                     .map(|p| (p.name().to_string(), p.cpu_usage()))
@@ -99,20 +100,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         clean.to_uppercase().chars().take(8).collect()
                     })
                     .collect();
-                
-                proc_tick_count = 40; 
-            } else {
-                proc_tick_count -= 1;
-            }
 
-            let current_disk_bytes: u64 = sys.processes()
-                .values()
-                .map(|p| p.disk_usage().read_bytes + p.disk_usage().written_bytes)
-                .sum();
-            let disk_delta = current_disk_bytes.saturating_sub(last_disk_bytes);
-            last_disk_bytes = current_disk_bytes;
-            
-            let disk_usage = (disk_delta as f32 / 250_000.0).min(100.0);
+                let current_disk_bytes: u64 = sys.processes()
+                    .values()
+                    .map(|p| p.disk_usage().read_bytes + p.disk_usage().written_bytes)
+                    .sum();
+                let disk_delta = current_disk_bytes.saturating_sub(last_disk_bytes);
+                last_disk_bytes = current_disk_bytes;
+                disk_usage = (disk_delta as f32 / 250_000.0).min(100.0);
+            }
 
             city.update(terminal.size()?, cpu, ram, disk_usage, proc_names.clone());
             last_tick = Instant::now();
