@@ -14,7 +14,7 @@ rustPlatform.buildRustPackage rec {
   cargoHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="; # Placeholder
 
   meta = with lib; {
-    description = "A cinematic, retro-cyberpunk system monitor for the terminal powered by Rust";
+    description = "The cyberpunk system monitor for your terminal.";
     homepage = "https://github.com/5c0/metropolis";
     license = licenses.mit;
     maintainers = with maintainers; [ ];
