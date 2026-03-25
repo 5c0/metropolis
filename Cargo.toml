@@ -17,8 +17,10 @@ exclude = [
     ".github/",
     ".gitignore",
     "flake.nix",
+    "default.nix",
+    "nix/",
     "install.sh",
-    "docs/*.gif",
+    "docs/",
 ]
 
 [[bin]]
