@@ -46,6 +46,7 @@
 
         apps.default = flake-utils.lib.mkApp {
           drv = metropolis;
+          exePath = "/bin/metropolis";
         };
 
         devShells.default = craneLib.devShell {
