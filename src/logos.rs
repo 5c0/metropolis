@@ -302,9 +302,6 @@ pub fn get_logo(distro: &str) -> DistroLogo {
             "      \\#/ \\##\\      \\Q/          ",
             "       ‾   ‾‾‾                  ",
         ];
-        // Per-cell palette mask: '#' = dark_cyan, anything else = light_cyan.
-        // This decouples color from character identity, so the same char can have
-        // different colors at different positions.
         let (points, min_x, min_y, offset_x, offset_y) = prepare_logo_grid!(grid, lines, is_compact, b_bg, 2);
         if !points.is_empty() {
             for &(x, y, ch) in &points {
@@ -705,9 +702,9 @@ pub fn get_logo(distro: &str) -> DistroLogo {
         }
     } else if d.contains("endeavour") {
         is_compact = true;
-        let c1 = Color::Rgb(255, 74, 90);   // Red
-        let c2 = Color::Rgb(125, 124, 196); // Purple
-        let c3 = Color::Rgb(0, 180, 255);   // Light Blue/Cyan
+        let c1 = Color::Rgb(255, 74, 90);
+        let c2 = Color::Rgb(125, 124, 196);
+        let c3 = Color::Rgb(0, 180, 255);
         let b_bg = Color::Reset;
         let lines = vec![
             "           /*",
@@ -887,7 +884,7 @@ pub fn get_logo(distro: &str) -> DistroLogo {
             let art_width = (max_x - min_x) + 1;
             let art_height = (max_y - min_y) + 1;
             let offset_x = (32_usize.saturating_sub(art_width)) / 2;
-            let offset_y = 2; // Extra margin
+            let offset_y = 2;
 
             for by in 0..art_height {
                 for bx in 0..art_width {
@@ -934,7 +931,6 @@ pub fn get_logo(distro: &str) -> DistroLogo {
         }
     } else {
         is_compact = true;
-        // High-contrast, background-free perfect aesthetic wireframe
         let wireframe_body = Color::DarkGray; 
         let white_eyes = Color::White;
         let neon_orange = Color::Rgb(255, 140, 0); 
@@ -976,7 +972,7 @@ pub fn get_logo(distro: &str) -> DistroLogo {
         if !points.is_empty() {
             let art_width = (max_x - min_x) + 1;
             let offset_x = (32_usize.saturating_sub(art_width)) / 2;
-            let offset_y = 2; // Extra margin
+            let offset_y = 2;
 
             for &(x, y, ch) in &points {
                 let gx = (x - min_x) + offset_x;
@@ -984,12 +980,9 @@ pub fn get_logo(distro: &str) -> DistroLogo {
                 if gx < 32 && gy < 20 {
                     let mut color = wireframe_body;
                     
-                    // Eyes
                     if y == 3 && x >= 8 && x <= 13 { color = white_eyes; }
-                    // Beak
                     else if y == 4 && x >= 8 && x <= 13 { color = neon_orange; }
                     else if y == 5 && x >= 8 && x <= 12 { color = neon_orange; }
-                    // Feet
                     else if y == 11 && ((x >= 1 && x <= 6) || (x >= 15 && x <= 16)) { color = neon_orange; }
                     else if y == 12 && ((x >= 1 && x <= 7) || (x >= 15 && x <= 18) || x == 20) { color = neon_orange; }
                     else if y == 13 { color = neon_orange; }
