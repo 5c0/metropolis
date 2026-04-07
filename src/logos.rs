@@ -285,12 +285,12 @@ pub fn get_logo(distro: &str) -> DistroLogo {
         let dark_cyan = Color::Rgb(82, 119, 186);
         let b_bg = Color::Reset;
         let lines = vec![
-            "          ___   __              ",
-            "   /#\\     \\QQ\\ /fy;            ",
-            "   \\#+\\     \\lQvfy/             ",
-            ",=#####=##+\\ \\QOy/   /,         ",
-            "/+=#######=++\\ \\Qq\\  /+#;        ",
-            "     ,——,       \\O/ /+#/_        ",
+            "             ___   __              ",
+            "     /#\\     \\QQ\\ /fy;            ",
+            "     \\#+\\     \\lQvfy/             ",
+            "  ,=#####=##+\\ \\QOy/   /,         ",
+            " /+=#######=++\\ \\Qq\\  /+#;        ",
+            "      ,——,       \\O/ /+#/_        ",
             "_____/fy/         ‘ /+###+\\       ",
             "\\QOOQfy/           /##/¯¯¯¯       ",
             " ¯¯/fy/ ,         /y#/            ",
@@ -301,15 +301,33 @@ pub fn get_logo(distro: &str) -> DistroLogo {
             "      \\#/ \\##\\      \\Q/          ",
             "       ‾   ‾‾‾                  ",
         ];
-        for (y, line) in lines.iter().enumerate() {
-            let chars: Vec<char> = line.chars().collect();
-            for (x, &ch) in chars.iter().enumerate() {
-                if ch != ' ' {
-                    let color = if "#+=/|Y_——".contains(ch) { dark_cyan } else { light_cyan };
-                    let gx = x + 4;
-                    if gx < 32 && y < 20 {
-                        grid[y+2][gx] = Some(LogoPixel { ch, color, bg: b_bg });
-                    }
+        // Per-cell palette mask: '#' = dark_cyan, anything else = light_cyan.
+        // This decouples color from character identity, so the same char can have
+        // different colors at different positions.
+        let (points, min_x, min_y, offset_x, offset_y) = prepare_logo_grid!(grid, lines, is_compact, b_bg, 2);
+        if !points.is_empty() {
+            for &(x, y, ch) in &points {
+                let gx = (x - min_x) + offset_x;
+                let gy = (y - min_y) + offset_y;
+                if gx < 32 && gy < 20 {
+                    let color = match y {
+                        0 => light_cyan,
+                        1 => if x <= 7 { dark_cyan } else { light_cyan },
+                        2 => if x <= 8 { dark_cyan } else { light_cyan },
+                        3 => if (x <= 13) || (x >= 22 && x <= 24) { dark_cyan } else { light_cyan },
+                        4 => if (x <= 14) || (x >= 21 && x <= 25) { dark_cyan } else { light_cyan },
+                        5 => if x <= 19 { light_cyan } else { dark_cyan },
+                        6 => if x <= 18 { light_cyan } else { dark_cyan },
+                        7 => if x <= 17 { light_cyan } else { dark_cyan },
+                        8 => if x <= 6 { light_cyan } else { dark_cyan },
+                        9 => if (x <= 5) || (x >= 10) { light_cyan } else { dark_cyan },
+                        10 => if (x <= 5) || (x >= 11) { light_cyan } else { dark_cyan },
+                        11 => if x >= 12 { light_cyan } else { dark_cyan },
+                        12 => if x >= 13 { light_cyan } else { dark_cyan },
+                        13 => if x >= 14 { light_cyan } else { dark_cyan },
+                        _ => dark_cyan,
+                    };
+                    grid[gy][gx] = Some(LogoPixel { ch, color, bg: b_bg });
                 }
             }
         }
