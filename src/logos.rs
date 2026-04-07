@@ -281,6 +281,7 @@ pub fn get_logo(distro: &str) -> DistroLogo {
             }
         }
     } else if d.contains("nixos") {
+        is_compact = true;
         let light_cyan = Color::Rgb(126, 186, 223);
         let dark_cyan = Color::Rgb(82, 119, 186);
         let b_bg = Color::Reset;
