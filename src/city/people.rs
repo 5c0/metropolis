@@ -1,4 +1,5 @@
 use ratatui::style::Color;
+use super::buildings::BuildingInfo;
 
 #[derive(Debug, Clone)]
 pub struct Person {
@@ -16,6 +17,7 @@ pub fn update_people(
     area: ratatui::layout::Rect,
     theme: &crate::theme::Theme,
     config: &crate::config::SimulationConfig,
+    buildings: &[BuildingInfo],
     rng: &mut impl rand::Rng,
 ) {
     if people.len() < config.max_pedestrians && frame_count % 15 == 0 {
@@ -27,10 +29,12 @@ pub fn update_people(
         if !p.is_entering {
             p.x += p.speed;
             let mut is_main = false; let mut near_door = false;
-            for (idx, xb) in (0..area.width).step_by(20).enumerate() {
-                let mut bw = 8; if idx == 1 { bw = 32; }
-                let dx = xb + (bw / 2);
-                if (p.x as u16).abs_diff(dx) < 1 { near_door = true; if idx == 1 { is_main = true; } break; }
+            for b in buildings {
+                if (p.x as u16).abs_diff(b.door_x) < 1 {
+                    near_door = true;
+                    if b.index == 1 { is_main = true; }
+                    break;
+                }
             }
             if near_door && rng.gen_bool(0.02) {
                 let chance = if is_main { 0.4 } else { 0.1 };

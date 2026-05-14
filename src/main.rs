@@ -68,9 +68,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         if needs_draw {
+            let draw_start = Instant::now();
             terminal.draw(|f| {
                 f.render_widget(&city, f.size());
             })?;
+            city.perf.draw_us = draw_start.elapsed().as_micros() as u64;
+            city.perf.push_frame();
             needs_draw = false;
         }
 
@@ -146,7 +149,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 disk_usage = (disk_delta as f32 / 250_000.0).min(100.0);
             }
 
+            let update_start = Instant::now();
             city.update(terminal.size()?, cpu, ram, disk_usage, proc_names.clone());
+            city.perf.update_us = update_start.elapsed().as_micros() as u64;
             last_tick = Instant::now();
             needs_draw = true;
         }

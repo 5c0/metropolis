@@ -21,6 +21,71 @@ use people::Person;
 use utils::*;
 use buildings::*;
 
+const PERF_HISTORY_LEN: usize = 60;
+
+pub struct PerfStats {
+    pub update_us: u64,
+    pub draw_us: u64,
+    history_update: [u64; PERF_HISTORY_LEN],
+    history_draw: [u64; PERF_HISTORY_LEN],
+    head: usize,
+    count: usize,
+}
+
+impl PerfStats {
+    fn new() -> Self {
+        Self {
+            update_us: 0,
+            draw_us: 0,
+            history_update: [0; PERF_HISTORY_LEN],
+            history_draw: [0; PERF_HISTORY_LEN],
+            head: 0,
+            count: 0,
+        }
+    }
+
+    pub fn push_frame(&mut self) {
+        self.history_update[self.head] = self.update_us;
+        self.history_draw[self.head] = self.draw_us;
+        self.head = (self.head + 1) % PERF_HISTORY_LEN;
+        if self.count < PERF_HISTORY_LEN {
+            self.count += 1;
+        }
+    }
+
+    pub fn avg_update_us(&self) -> u64 {
+        if self.count == 0 { return 0; }
+        self.history_update[..self.count].iter().sum::<u64>() / self.count as u64
+    }
+
+    pub fn avg_draw_us(&self) -> u64 {
+        if self.count == 0 { return 0; }
+        self.history_draw[..self.count].iter().sum::<u64>() / self.count as u64
+    }
+
+    pub fn max_update_us(&self) -> u64 {
+        if self.count == 0 { return 0; }
+        *self.history_update[..self.count].iter().max().unwrap_or(&0)
+    }
+
+    pub fn max_draw_us(&self) -> u64 {
+        if self.count == 0 { return 0; }
+        *self.history_draw[..self.count].iter().max().unwrap_or(&0)
+    }
+
+    /// Returns the draw history as (index, value) pairs, oldest first
+    pub fn draw_history(&self) -> impl Iterator<Item = (usize, u64)> + '_ {
+        (0..self.count).map(move |i| {
+            let idx = if self.count < PERF_HISTORY_LEN {
+                i
+            } else {
+                (self.head + i) % PERF_HISTORY_LEN
+            };
+            (i, self.history_draw[idx])
+        })
+    }
+}
+
 pub struct MetropolisCity {
     pub vehicles: Vec<Vehicle>,
     pub raindrops: Vec<Raindrop>,
@@ -47,6 +112,10 @@ pub struct MetropolisCity {
     pub simulation_config: crate::config::SimulationConfig,
     pub cpu_string: String,
     pub ram_string: String,
+    pub perf: PerfStats,
+    pub buildings_cache: Vec<BuildingInfo>,
+    cached_width: u16,
+    cached_height: u16,
 }
 
 impl MetropolisCity {
@@ -103,6 +172,19 @@ impl MetropolisCity {
             simulation_config,
             cpu_string: String::from("0"),
             ram_string: String::from("0"),
+            perf: PerfStats::new(),
+            buildings_cache: Vec::new(),
+            cached_width: 0,
+            cached_height: 0,
+        }
+    }
+
+    /// Rebuild the building geometry cache if terminal dimensions changed
+    fn rebuild_buildings_if_needed(&mut self, area: Rect) {
+        if area.width != self.cached_width || area.height != self.cached_height {
+            self.buildings_cache = compute_buildings(area.width, area.height);
+            self.cached_width = area.width;
+            self.cached_height = area.height;
         }
     }
 
@@ -120,10 +202,14 @@ impl MetropolisCity {
 
         if area.width < 32 || area.height < 12 { return; }
 
+        self.rebuild_buildings_if_needed(area);
+
         let mut rng = thread_rng();
 
         vehicles::update_vehicles(&mut self.vehicles, &mut self.chase_cooldown, self.frame_count, cpu, self.disk_usage, area, &self.theme, &self.simulation_config, &mut rng);
-        people::update_people(&mut self.people, self.frame_count, area, &self.theme, &self.simulation_config, &mut rng);
+        let mut people = std::mem::take(&mut self.people);
+        people::update_people(&mut people, self.frame_count, area, &self.theme, &self.simulation_config, &self.buildings_cache, &mut rng);
+        self.people = people;
         weather::update_weather(&self.weather, &mut self.raindrops, &mut self.splashes, self.frame_count, area, &self.simulation_config, &mut rng);
     }
 
@@ -207,7 +293,6 @@ impl MetropolisCity {
 
     fn render_skyline(&self, area: Rect, buf: &mut Buffer) {
         let logo_asset = &self.logo_asset;
-        let mut skip_next = false;
         let b_base_color = self.theme.building_base_colors[1];
         let ground_y = area.height.saturating_sub(3);
 
@@ -229,14 +314,12 @@ impl MetropolisCity {
             }
         }
 
-        for (i, x_base) in (0..area.width).step_by(20).enumerate() {
-            if skip_next { skip_next = false; continue; }
-            let mut bw = 8 + (x_base % 7) as u16;
-            let mut bh = (area.height / 3) + (x_base % 11) as u16;
-            if i == 1 { bw = 32; bh = area.height.saturating_sub(8); skip_next = true; }
-            if i == 3 { bw = 28; skip_next = true; }
+        for b in &self.buildings_cache {
+            let i = b.index;
+            let bw = b.width;
+            let bh = b.height;
             let start_y = ground_y.saturating_sub(bh);
-            let start_x = area.x.saturating_add(x_base);
+            let start_x = area.x.saturating_add(b.x_offset);
 
             for y_rel in 0..bh {
                 for x_rel in 0..bw {
@@ -370,14 +453,7 @@ impl MetropolisCity {
 
     fn render_street_lamps(&self, area: Rect, buf: &mut Buffer) {
         for x_lamp in (5..area.width).step_by(10) {
-            let mut inside = false; let mut s_skip = false;
-            for (idx, xb) in (0..area.width).step_by(20).enumerate() {
-                if s_skip { s_skip = false; continue; }
-                let mut bw = 8 + (xb % 7) as u16;
-                if idx == 1 { bw = 32; s_skip = true; }
-                if idx == 3 { bw = 28; s_skip = true; }
-                if x_lamp >= xb && x_lamp < xb + bw { inside = true; break; }
-            }
+            let inside = self.buildings_cache.iter().any(|b| b.contains_x(x_lamp));
             if !inside {
                 let lx = area.x + x_lamp; 
                 let ground_y = area.y + area.height - 3;
@@ -421,16 +497,10 @@ impl MetropolisCity {
 
     fn render_megaboard(&self, area: Rect, buf: &mut Buffer) {
         let ground_y = area.height.saturating_sub(3);
-        let mut mb_tower_h = 0;
-        let mut mb_skip_next = false;
-        for (idx, xb) in (0..area.width).step_by(20).enumerate() {
-            if mb_skip_next { mb_skip_next = false; continue; }
-            if idx == 1 { mb_skip_next = true; }
-            if idx == 3 { mb_tower_h = (area.height / 3) + (xb % 11) as u16; break; }
-        }
-        if mb_tower_h > 0 {
+        // Find building at index 3 from the cache
+        if let Some(b3) = self.buildings_cache.iter().find(|b| b.index == 3) {
             let mb_x = area.x + 60;
-            let mb_y = ground_y.saturating_sub(mb_tower_h);
+            let mb_y = ground_y.saturating_sub(b3.height);
             draw_roof_megaboard(
                 buf, 
                 mb_x + 1, mb_y, 
@@ -452,15 +522,12 @@ impl MetropolisCity {
             let py_l = area.y + ground_y; 
             let py_h = py_l.saturating_sub(1);
             if px < area.x + area.width && py_l < area.y + area.height {
-                let mut building_bg = None; let mut s_skip = false;
-                for (idx, xb) in (0..area.width).step_by(20).enumerate() {
-                    if s_skip { s_skip = false; continue; }
-                    let mut bw = 8 + (xb % 7) as u16;
-                    if idx == 1 { bw = 32; s_skip = true; }
-                    if idx == 3 { bw = 28; s_skip = true; }
-                    let tower_h = if idx == 1 { area.height - 8 } else if idx == 3 { area.height - 6 } else { (area.height / 3) + (xb % 11) as u16 };
-                    if px >= area.x + xb && px < area.x + xb + bw && py_l >= buf.area.y + ground_y.saturating_sub(tower_h) { building_bg = Some(b_base_color); break; }
-                }
+                let building_bg = self.buildings_cache.iter().find(|b| {
+                    let bx = area.x + b.x_offset;
+                    let top_y = ground_y.saturating_sub(b.height);
+                    px >= bx && px < bx + b.width && py_l >= area.y + top_y
+                }).map(|_| b_base_color);
+
                 let gait = if p.is_entering && p.entry_pause_timer > 0 { 1 } else { ((self.frame_count + p.id_offset) / 4) % 3 };
                 let leg_char = match gait { 0 => 'Λ', 1 => '|', _ => 'λ' };
                 safe_set_char_with_bg(buf, px, py_h, 'o', p.color, building_bg.unwrap_or(Color::Reset));
@@ -563,13 +630,110 @@ impl MetropolisCity {
         if self.debug_mode {
             let dx = area.x + 2; let dy = area.y + 2;
             let dg_color = Color::Rgb(85, 255, 85);
-            safe_set_string(buf, dx, dy,     "--- DIAGNOSTICS ---", dg_color);
-            safe_set_string(buf, dx, dy + 1, &format!("FRM:  {:08}", self.frame_count), Color::White);
-            safe_set_string(buf, dx, dy + 2, &format!("WTR:  {:?}", self.weather), Color::White);
-            safe_set_string(buf, dx, dy + 3, &format!("CSH:  {:04}", self.chase_cooldown), Color::White);
-            safe_set_string(buf, dx, dy + 4, &format!("SEED: {:016X}", self.window_seed), Color::White);
-            safe_set_string(buf, dx, dy + 5, &format!("VHC:  {:03}", self.vehicles.len()), Color::White);
-            safe_set_string(buf, dx, dy + 6, "-------------------", dg_color);
+            let dim = Color::Rgb(60, 60, 60);
+            let val_color = Color::White;
+
+            // Header
+            safe_set_string(buf, dx, dy, "╔══ DIAGNOSTICS ══╗", dg_color);
+
+            // Original stats
+            safe_set_string(buf, dx, dy + 1, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 1, "FRM:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 1, &format!("{:08}", self.frame_count), val_color);
+
+            safe_set_string(buf, dx, dy + 2, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 2, "WTR:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 2, &format!("{:>8?}", self.weather), val_color);
+
+            safe_set_string(buf, dx, dy + 3, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 3, "VHC:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 3, &format!("{:03}", self.vehicles.len()), val_color);
+
+            safe_set_string(buf, dx, dy + 4, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 4, "PED:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 4, &format!("{:03}", self.people.len()), val_color);
+
+            safe_set_string(buf, dx, dy + 5, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 5, "DRP:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 5, &format!("{:03}", self.raindrops.len()), val_color);
+
+            // Separator
+            safe_set_string(buf, dx, dy + 6, "╠══ PERF (µs) ════╣", dg_color);
+
+            // Perf timings
+            let warn = Color::Rgb(255, 200, 85);
+            let hot = Color::Rgb(255, 85, 85);
+
+            let upd = self.perf.update_us;
+            let upd_avg = self.perf.avg_update_us();
+            let upd_max = self.perf.max_update_us();
+            let upd_color = if upd > 5000 { hot } else if upd > 2000 { warn } else { val_color };
+            safe_set_string(buf, dx, dy + 7, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 7, "UPD:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 7, &format!("{:>6}", upd), upd_color);
+
+            safe_set_string(buf, dx, dy + 8, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 8, " avg:", dim);
+            safe_set_string(buf, dx + 8, dy + 8, &format!("{:>6}", upd_avg), Color::Rgb(170, 170, 170));
+            safe_set_string(buf, dx + 15, dy + 8, &format!("p{:>3}", upd_max), dim);
+
+            let drw = self.perf.draw_us;
+            let drw_avg = self.perf.avg_draw_us();
+            let drw_max = self.perf.max_draw_us();
+            let drw_color = if drw > 10000 { hot } else if drw > 5000 { warn } else { val_color };
+            safe_set_string(buf, dx, dy + 9, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 9, "DRW:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 9, &format!("{:>6}", drw), drw_color);
+
+            safe_set_string(buf, dx, dy + 10, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 10, " avg:", dim);
+            safe_set_string(buf, dx + 8, dy + 10, &format!("{:>6}", drw_avg), Color::Rgb(170, 170, 170));
+            safe_set_string(buf, dx + 15, dy + 10, &format!("p{:>3}", drw_max), dim);
+
+            let total = upd + drw;
+            let total_avg = upd_avg + drw_avg;
+            let total_color = if total > 16000 { hot } else if total > 8000 { warn } else { val_color };
+            safe_set_string(buf, dx, dy + 11, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 11, "TOT:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 11, &format!("{:>6}", total), total_color);
+            safe_set_string(buf, dx + 15, dy + 11, &format!("a{:>3}", total_avg / 1000), dim);
+
+            // Sparkline - last 16 draw times as a mini bar chart
+            safe_set_string(buf, dx, dy + 12, "╠══ DRAW HIST ════╣", dg_color);
+            safe_set_string(buf, dx, dy + 13, "║                 ║", dim);
+            safe_set_string(buf, dx, dy + 14, "║                 ║", dim);
+
+            let bars: Vec<u64> = self.perf.draw_history()
+                .map(|(_, v)| v)
+                .collect::<Vec<_>>()
+                .iter()
+                .rev()
+                .take(16)
+                .rev()
+                .copied()
+                .collect();
+
+            if !bars.is_empty() {
+                let max_val = *bars.iter().max().unwrap_or(&1).max(&1);
+                let ticks = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+                for (i, &val) in bars.iter().enumerate() {
+                    let norm = ((val as f64 / max_val as f64) * 7.0) as usize;
+                    let tick = ticks[norm.min(7)];
+                    let bar_color = if val > 10000 { hot } else if val > 5000 { warn } else { dg_color };
+                    safe_set_char(buf, dx + 2 + i as u16, dy + 14, tick, bar_color);
+                }
+                // Scale label
+                safe_set_string(buf, dx + 2, dy + 13, &format!("{:.0}ms", max_val as f64 / 1000.0), dim);
+            }
+
+            // Footer with budget indicator
+            let budget_pct = (total_avg as f64 / 50000.0 * 100.0) as u64; // 50ms = 20fps budget
+            let budget_color = if budget_pct > 80 { hot } else if budget_pct > 50 { warn } else { dg_color };
+            safe_set_string(buf, dx, dy + 15, "║                 ║", dim);
+            safe_set_string(buf, dx + 2, dy + 15, "BDG:", dg_color);
+            safe_set_string(buf, dx + 8, dy + 15, &format!("{:>3}%/50ms", budget_pct), budget_color);
+
+            safe_set_string(buf, dx, dy + 16, "╚═════════════════╝", dg_color);
         }
     }
 }
