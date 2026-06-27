@@ -63,6 +63,11 @@ cargo install metropolis-tui
 yay -S metropolis
 ```
 
+### Homebrew (macOS)
+```bash
+brew install 5c0/tap/metropolis
+```
+
 ### Windows (winget)
 ```bash
 winget install 5c0.Metropolis
