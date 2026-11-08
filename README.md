@@ -5,7 +5,7 @@
 
 [![Rust](https://img.shields.io/badge/language-Rust-orange.svg?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.1-neon.svg?style=for-the-badge)](https://github.com/5c0/metropolis/releases)
+[![Version](https://img.shields.io/badge/version-0.1.3-neon.svg?style=for-the-badge)](https://github.com/5c0/metropolis/releases)
 [![AUR](https://img.shields.io/badge/AUR-metropolis-deepskyblue.svg?style=for-the-badge&logo=arch-linux)](https://aur.archlinux.org/packages/metropolis)
 
 **"The year is 20XX. Your processes aren't just rows in a table. They're the residents. Your CPU isn't just silicon. It's the infrastructure. And the city? The city is breathing."**
