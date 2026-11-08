@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # --- Metropolis Installation Script ---
-# "The city is breathing."
 
 # Colors for the terminal
 CYAN='\033[0;36m'
