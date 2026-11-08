@@ -1,5 +1,5 @@
 {
-  description = "The cyberpunk city powered by your kernel metrics";
+  description = "Cyberpunk city powered by your kernel metrics";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
